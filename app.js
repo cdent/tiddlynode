@@ -223,31 +223,31 @@ var routes = {
 
 // configure and start the server
 http.createServer(function (req, res) {
-        var parsed_url = url.parse(req.url, true);
-        var path = parsed_url.pathname;
-        var method = req.method;
+    var parsed_url = url.parse(req.url, true);
+    var path = parsed_url.pathname;
+    var method = req.method;
 
-        // find a matching route
-        var route = undefined;
-        for (pattern in routes) {
-            if (path.match('^' + pattern + '$')) {
-                route = routes[pattern];
-                break;
-            }
+    // find a matching route
+    var route = undefined;
+    for (pattern in routes) {
+        if (path.match('^' + pattern + '$')) {
+            route = routes[pattern];
+            break;
         }
-        
-        if (route == undefined) {
-            res.writeHead(404, {'Content-Type': 'text/plain'});
-            res.end(path + ' not found' + '\n');
+    }
+    
+    if (route == undefined) {
+        res.writeHead(404, {'Content-Type': 'text/plain'});
+        res.end(path + ' not found' + '\n');
+    } else {
+        route_for_method = route[method];
+        if (route_for_method == undefined) {
+            res.writeHead(405, {'Content-Type': 'text/plain'});
+            res.end(method + ' not allowed' + '\n');
         } else {
-            route_for_method = route[method];
-            if (route_for_method == undefined) {
-                res.writeHead(405, {'Content-Type': 'text/plain'});
-                res.end(method + ' not allowed' + '\n');
-            } else {
-                route_for_method(req, res);
-            }
+            route_for_method(req, res);
         }
-    }).listen(8000);
+    }
+}).listen(8000);
 
 sys.puts('Server running at http://127.0.0.1:8000/');
