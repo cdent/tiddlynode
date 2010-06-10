@@ -1,0 +1,38 @@
+
+A stab at making a TiddlyWeb under node.js. With several constraints
+that may change over time:
+
+* HTTP API only. 
+* JSON only, no other serializations (no HTML!).
+* No support for authentication or authorization, meaning no
+  users and no polices.
+* No support for revisions.
+* The author has no clue what he's doing and is winging it.
+
+It does not work yet. Some routes are not yet mapped to handlers
+that work. There are issues with asynchronous handling. There needs
+to be a sense of object for the main entities. These probably ought
+to be EventEmitters, or there should be a notion of a StorageInterface
+which is an emitter. The lack of clear separation between handlers,
+entities, and persistence is a problem right now for making clear
+code and understanding how the system works.
+
+Things hoping to explore:
+
+* proper asynchrony
+
+Run it by doing:
+
+   node app.js
+
+This will start a server running at port 8000.
+
+Entities are stored in the current directory:
+
+* foo.recipe files as JSON.
+* foo.bag directories contain a 'description' file and a tiddlers
+  directory.
+* tiddlers are saved as files by title, JSON on disk.
+
+A convenient way to test it is to use the test_urlmap.py
+and http_runner.py files from the Python distribution.
