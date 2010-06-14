@@ -37,19 +37,17 @@ var Store = {
                 error(err);
             } else {
                 if (files) {
+                // XXX would prefer for this to be async, but the 
+                // it's hard to get the 'end' emitting at the right
+                // time. Two layers of emitter might do the trick.
                     files.forEach(function(file) {
                         sys.puts('gonna read ' + file);
-                        fs.readFile(tiddlers_dir + '/' + file, 'utf8', function(err, data) {
-                            if (err) {
-                                emitter.emit('error');
-                            } else {
-                                sys.puts(data);
-                                var tiddler = JSON.parse(data);
-                                tiddler.title = file;
-                                emitter.emit('data', tiddler);
-                            }
-                        });
+                        var data = fs.readFileSync(tiddlers_dir + '/' + file, 'utf8');
+                        var tiddler = JSON.parse(data);
+                        tiddler.title = file;
+                        emitter.emit('data', tiddler);
                     });
+                    emitter.emit('end');
                 } else {
                     emitter.emit('end');
                 }
@@ -133,6 +131,22 @@ var handlers = {
             res.end(JSON.stringify({'description': data}));
         }
         Store.get_bag(bag_name, success, error);
+    },
+    get_bag_tiddlers: function(req, res) {
+        var bag_name = RegExp.$1;
+        var emitter = Store.get_bag_tiddlers(bag_name);
+        var tiddlers = [];
+        emitter.addListener('data', function(tiddler) {
+            tiddlers.push({title: tiddler.title});
+        });
+        emitter.addListener('end', function() {
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify(tiddlers));
+        });
+        emitter.addListener('error', function(err) {
+            res.writeHead('404', {'Content-Type': 'text/plain'});
+            res.end('something went wrong with bag ' + bag_name + ', ' + err);
+        });
     },
     put_bag: function(req, res) {
         var body = '';
@@ -305,10 +319,7 @@ var routes = {
         PUT: handlers.put_bag,
     },
     '\/bags\/(\\w+)\/tiddlers\/?': {
-        GET: function(req, res) {
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end('/bags/' + RegExp.$1 + '/tiddlers' + '\n');
-         },
+        GET: handlers.get_bag_tiddlers,
     },
     '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/?': {
         PUT: handlers.put_bag_tiddler,
