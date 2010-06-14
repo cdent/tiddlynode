@@ -35,4 +35,4 @@ Entities are stored in the current directory:
 * tiddlers are saved as files by title, JSON on disk.
 
 A convenient way to test it is to use the test_urlmap.py
-and http_runner.py files from the Python distribution.
+and http_runner.py files from the Python TiddlyWeb distribution.

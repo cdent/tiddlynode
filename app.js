@@ -3,7 +3,62 @@ var sys = require('sys'),
     url = require('url');
     fs = require('fs');
 
+var Emitter = require('events').EventEmitter;
+
 var front_page = "<html> <head> <title>Welcome</title> </head> <body> <ul> <li><a href='/bags'>bags</a></li> <li><a href='/recipes'>recipes</a></li> </ul> </body> </html> ";
+
+var Store = {
+    get_bag: function(bag_name, success, error) {
+        var bag_dir = bag_name + '.bag';
+        fs.readFile(bag_dir + '/description', 'utf8', function(err, data) {
+            if (err) {
+                error(err);
+            } else {
+                success(data);
+            }
+        });
+    },
+    get_recipe: function(recipe_name, success, error) {
+        var recipe_file = recipe_name + '.recipe';
+        fs.readFile(recipe_file, 'utf8', function(err, data) {
+            if (err) {
+                error(err);
+            } else {
+                success(data);
+            }
+        });
+    },
+    get_bag_tiddlers: function(bag_name, success, error) {
+        var tiddlers_dir = bag_name + '.bag' + '/tiddlers';
+        sys.puts('getting tiddlers from ' + tiddlers_dir);
+        var emitter = new Emitter();
+        fs.readdir(tiddlers_dir, function(err, files) {
+            if (err) {
+                error(err);
+            } else {
+                if (files) {
+                    files.forEach(function(file) {
+                        sys.puts('gonna read ' + file);
+                        fs.readFile(tiddlers_dir + '/' + file, 'utf8', function(err, data) {
+                            if (err) {
+                                emitter.emit('error');
+                            } else {
+                                sys.puts(data);
+                                var tiddler = JSON.parse(data);
+                                tiddler.title = file;
+                                emitter.emit('data', tiddler);
+                            }
+                        });
+                    });
+                } else {
+                    emitter.emit('end');
+                }
+            }
+        });
+        return emitter;
+    },
+}
+
 
 var handlers = {
     get_root: function(req, res) {
@@ -69,15 +124,15 @@ var handlers = {
     get_bag: function(req, res) {
         var bag_name = RegExp.$1;
         var bag_dir = bag_name + '.bag';
-        fs.readFile(bag_dir + '/description', 'utf8', function(err, data) {
-            if (err) {
-                res.writeHead(404, {'Content-Type': 'text/plain'});
-                res.end('No bag ' + bag_name + '\n');
-            } else {
-                res.writeHead(200, {'Content-Type': 'text/plain'});
-                res.end(JSON.stringify({'description': data}));
-            }
-        });
+        var error = function(err) {
+            res.writeHead(404, {'Content-Type': 'text/plain'});
+            res.end('No bag ' + bag_name + ': ' + err + '\n');
+        }
+        var success = function(data) {
+            res.writeHead(200, {'Content-Type': 'text/plain'});
+            res.end(JSON.stringify({'description': data}));
+        }
+        Store.get_bag(bag_name, success, error);
     },
     put_bag: function(req, res) {
         var body = '';
@@ -140,6 +195,50 @@ var handlers = {
             }
         });
     },
+    get_recipe_tiddler: function(req, res) {
+        var recipe_name = RegExp.$1;
+        var tiddler_name = RegExp.$2;
+        var error = function(err) {
+            res.writeHead(404, {'Content-Type': 'text/plain'});
+            res.end('No recipe ' + recipe_name + ':'  + err + '\n');
+        }
+        var success = function(data) {
+            var recipe = JSON.parse(data).recipe;
+            var bags = [];
+            recipe.forEach(function(recipe_line) {
+                var bag = recipe_line[0];
+                var filter = recipe_line[1]; // discard for now
+                bags.push(bag); // in reverse order
+            });
+            var check_for_tiddler = function(bags) {
+                var bag = bags.pop();
+                var bagerror = function(err) {
+                    res.writeHead('404', {'Content-Type': 'text/plain'});
+                    res.end('No bag ' + bag + ': ' + err + '\n');
+                }
+                if (bag) {
+                    var emitter = Store.get_bag_tiddlers(bag);
+                    emitter.addListener('data', function(tiddler) {
+                         if (tiddler.title == tiddler_name) {
+                            res.writeHead(200, {'Content-Type': 'application/json'});
+                            res.end(JSON.stringify(tiddler));
+                        }
+                    });
+                    emitter.addListener('end', function() {
+                        if (bags) {
+                            check_for_tiddler(bags);
+                        }
+                    });
+                } else {
+                    res.writeHead('404', {'Content-Type': 'text/plain'});
+                    res.end('No recipe or bag for tiddler: ' + recipe_name +
+                            ':' + tiddler_name + '\n');
+                }
+            }
+            check_for_tiddler(bags);
+        }
+        Store.get_recipe(recipe_name, success, error);
+    },
     put_recipe_tiddler: function(req, res) {
         var body = '';
         req.setEncoding('utf8');
@@ -195,11 +294,11 @@ var routes = {
          },
     },
     '\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/?': {
-        GET: function(req, res) {
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end('/recipes/' + RegExp.$1 + '/tiddlers/' + RegExp.$2+ '\n');
-         },
+        GET: handlers.get_recipe_tiddler,
         PUT: handlers.put_recipe_tiddler,
+    },
+    '\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
+        GET: handlers.get_recipe_tiddler_revisions,
     },
     '\/bags\/(\\w+)\/?': {
         GET: handlers.get_bag,
@@ -217,6 +316,9 @@ var routes = {
             res.writeHead(200, {'Content-Type': 'text/plain'});
             res.end('/bags/' + RegExp.$1 + '/tiddlers/' + RegExp.$2+ '\n');
          },
+    },
+    '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
+        GET: handlers.get_bag_tiddler_revisions,
     },
     '\/search': { GET: handlers.search },
 };
