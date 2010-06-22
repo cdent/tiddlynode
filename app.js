@@ -28,26 +28,34 @@ var Store = {
             }
         });
     },
-    get_bag_tiddlers: function(bag_name, success, error) {
+    get_bag_tiddlers: function(bag_name) {
         var tiddlers_dir = bag_name + '.bag' + '/tiddlers';
         sys.puts('getting tiddlers from ' + tiddlers_dir);
         var emitter = new Emitter();
         fs.readdir(tiddlers_dir, function(err, files) {
             if (err) {
-                error(err);
+                emitter.emit('error', err);
             } else {
                 if (files) {
-                // XXX would prefer for this to be async, but the 
-                // it's hard to get the 'end' emitting at the right
-                // time. Two layers of emitter might do the trick.
-                    files.forEach(function(file) {
-                        sys.puts('gonna read ' + file);
-                        var data = fs.readFileSync(tiddlers_dir + '/' + file, 'utf8');
-                        var tiddler = JSON.parse(data);
-                        tiddler.title = file;
-                        emitter.emit('data', tiddler);
-                    });
-                    emitter.emit('end');
+                    while (files.length > 0) {
+                        file = files.shift();
+                        var tiddler_emitter = Store.get_tiddler(file, bag_name);
+                        var new_tiddler = null;
+                        tiddler_emitter.addListener('data', function(tiddler) {
+                            sys.puts('getting data ' + tiddler.title);
+                            new_tiddler = tiddler;
+                        });
+                        tiddler_emitter.addListener('end', function() {
+                            sys.puts('ending data ' + new_tiddler.title);
+                            emitter.emit('data', new_tiddler);
+                            if (files.length == 0) {
+                                emitter.emit('end');
+                            }
+                        });
+                        tiddler_emitter.addListener('error', function(err) {
+                            emitter.emit('error', err);
+                        });
+                    }
                 } else {
                     emitter.emit('end');
                 }
@@ -55,6 +63,23 @@ var Store = {
         });
         return emitter;
     },
+    get_tiddler: function(tiddler_title, bag_name) {
+        var tiddler_file = bag_name + '.bag' + '/tiddlers/' + tiddler_title;
+        sys.puts('getting tiddler ' + bag_name + ':' + tiddler_title);
+        var emitter = new Emitter();
+        fs.readFile(tiddler_file, 'utf8', function(err, data) {
+            if (err) {
+                emitter.emit('error', err);
+            } else {
+                var tiddler = JSON.parse(data);
+                tiddler.title = tiddler_title;
+                emitter.emit('data', tiddler);
+                emitter.emit('end');
+            }
+        });
+        return emitter;
+     },
+                
 }
 
 
@@ -141,6 +166,7 @@ var handlers = {
         });
         emitter.addListener('end', function() {
             res.writeHead(200, {'Content-Type': 'application/json'});
+            sys.puts('tiddlers are' + tiddlers);
             res.end(JSON.stringify(tiddlers));
         });
         emitter.addListener('error', function(err) {
@@ -179,6 +205,23 @@ var handlers = {
                 res.writeHead(400, {'Content-Type': 'text/plain'});
                 res.end('No body content\n');
             } 
+        });
+    },
+    get_bag_tiddler: function(req, res) {
+        var bag_name = RegExp.$1;
+        var tiddler_name = RegExp.$2;
+        var emitter = Store.get_tiddler(tiddler_name, bag_name);
+        var new_tiddler = null;
+        emitter.addListener('data', function(tiddler) {
+            new_tiddler = tiddler;
+        });
+        emitter.addListener('end', function() {
+            res.writeHead('200', {'Content-Type': 'application/json'});
+            res.end(JSON.stringify(new_tiddler));
+        });
+        emitter.addListener('error', function(err) {
+            res.writeHead('404', {'Content-Type': 'text/plain'});
+            res.end(err);
         });
     },
     put_bag_tiddler: function(req, res) {
@@ -353,9 +396,9 @@ var routes = {
         GET: handlers.get_recipe_tiddler,
         PUT: handlers.put_recipe_tiddler,
     },
-    '\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
+/*'\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
         GET: handlers.get_recipe_tiddler_revisions,
-    },
+    }, */
     '\/bags\/(\\w+)\/?': {
         GET: handlers.get_bag,
         PUT: handlers.put_bag,
@@ -365,14 +408,11 @@ var routes = {
     },
     '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/?': {
         PUT: handlers.put_bag_tiddler,
-        GET: function(req, res) {
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end('/bags/' + RegExp.$1 + '/tiddlers/' + RegExp.$2+ '\n');
-         },
+        GET: handlers.get_bag_tiddler,
     },
-    '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
+/*    '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
         GET: handlers.get_bag_tiddler_revisions,
-    },
+    },*/
     '\/search': { GET: handlers.search },
 };
 
