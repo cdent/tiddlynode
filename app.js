@@ -209,6 +209,51 @@ var handlers = {
             }
         });
     },
+    get_recipe_tiddlers: function(req, res) {
+        var recipe_name = RegExp.$1;
+        var error = function(err) {
+            res.writeHead(404, {'Content-Type': 'text/plain'});
+            res.end('No recipe ' + recipe_name + ':'  + err + '\n');
+        }
+        var success = function(data) {
+            var recipe = JSON.parse(data).recipe;
+            var bags = [];
+            recipe.forEach(function(recipe_line) {
+                var bag = recipe_line[0];
+                var filter = recipe_line[1]; // discard for now
+                bags.push(bag); // in reverse order
+            });
+            var check_for_tiddler = function(bags) {
+                var bag = bags.pop();
+                var bagerror = function(err) {
+                    res.writeHead('404', {'Content-Type': 'text/plain'});
+                    res.end('No bag ' + bag + ': ' + err + '\n');
+                }
+                if (bag) {
+                    var tiddlers = {};
+                    var emitter = Store.get_bag_tiddlers(bag);
+                    emitter.addListener('data', function(tiddler) {
+                        sys.puts('adding tiddler ' + tiddler.title);
+                        tiddlers[tiddler.title] = tiddler;
+                    });
+                    emitter.addListener('end', function() {
+                        sys.puts(bags.length);
+                        if (bags.length) {
+                            check_for_tiddler(bags);
+                        } else {
+                            res.writeHead('200', {'Content-Type': 'application/json'});
+                            res.end(JSON.stringify(tiddlers));
+                        }
+                    });
+                } else {
+                    res.writeHead('404', {'Content-Type': 'text/plain'});
+                    res.end('No bags for recipe: ' + recipe_name + '\n');
+                }
+            }
+            check_for_tiddler(bags);
+        }
+        Store.get_recipe(recipe_name, success, error);
+    },
     get_recipe_tiddler: function(req, res) {
         var recipe_name = RegExp.$1;
         var tiddler_name = RegExp.$2;
@@ -302,10 +347,7 @@ var routes = {
         PUT: handlers.put_recipe,
     },
     '\/recipes\/(\\w+)\/tiddlers\/?': {
-        GET: function(req, res) {
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end('/recipes/' + RegExp.$1 + '/tiddlers' + '\n');
-         },
+        GET: handlers.get_recipe_tiddlers,
     },
     '\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/?': {
         GET: handlers.get_recipe_tiddler,
