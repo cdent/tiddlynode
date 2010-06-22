@@ -7,6 +7,13 @@ var Emitter = require('events').EventEmitter;
 
 var front_page = "<html> <head> <title>Welcome</title> </head> <body> <ul> <li><a href='/bags'>bags</a></li> <li><a href='/recipes'>recipes</a></li> </ul> </body> </html> ";
 
+/*
+ * The Store is the set of routines which read and write data to the
+ * disk. This is like, but not the same as, the Store in
+ * PyTiddlyWeb. There is a hybrid between accepting success and
+ * error callbacks and in make the methods be emitters. The latter
+ * is probably the preferred way.
+ */
 var Store = {
     get_bag: function(bag_name, success, error) {
         var bag_dir = bag_name + '.bag';
@@ -18,6 +25,29 @@ var Store = {
             }
         });
     },
+    get_bags: function(bag_name) {
+        var emitter = new Emitter();
+        fs.readdir('.', function(err, files) {
+            if (err) {
+                emitter.emit('error', err);
+            } else {
+                if (files) {
+                    while (files.length > 0) {
+                        file = files.shift();
+                        if (/.bag$/.test(file)) {
+                            emitter.emit('data', file);
+                        }
+                        if (files.length == 0) {
+                            emitter.emit('end');
+                        }
+                    }
+                } else {
+                    emitter.emit('end');
+                }
+            }
+        });
+        return emitter;
+    },
     get_recipe: function(recipe_name, success, error) {
         var recipe_file = recipe_name + '.recipe';
         fs.readFile(recipe_file, 'utf8', function(err, data) {
@@ -28,9 +58,31 @@ var Store = {
             }
         });
     },
+    get_recipes: function() {
+        var emitter = new Emitter();
+        fs.readdir('.', function(err, files) {
+            if (err) {
+                emitter.emit('error', err);
+            } else {
+                if (files) {
+                    while (files.length > 0) {
+                        file = files.shift();
+                        if (/.recipe$/.test(file)) {
+                            emitter.emit('data', file);
+                        }
+                        if (files.length == 0) {
+                            emitter.emit('end');
+                        }
+                    }
+                } else {
+                    emitter.emit('end');
+                }
+            }
+        });
+        return emitter;
+    },
     get_bag_tiddlers: function(bag_name) {
         var tiddlers_dir = bag_name + '.bag' + '/tiddlers';
-        sys.puts('getting tiddlers from ' + tiddlers_dir);
         var emitter = new Emitter();
         fs.readdir(tiddlers_dir, function(err, files) {
             if (err) {
@@ -41,6 +93,7 @@ var Store = {
                         file = files.shift();
                         var tiddler_emitter = Store.get_tiddler(file, bag_name);
                         var new_tiddler = null;
+                        // XXX: the data/end combo here is fiddly
                         tiddler_emitter.addListener('data', function(tiddler) {
                             sys.puts('getting data ' + tiddler.title);
                             new_tiddler = tiddler;
@@ -65,7 +118,8 @@ var Store = {
     },
     get_tiddler: function(tiddler_title, bag_name) {
         var tiddler_file = bag_name + '.bag' + '/tiddlers/' + tiddler_title;
-        sys.puts('getting tiddler ' + bag_name + ':' + tiddler_title);
+        // XXX: Is an emitter here really the best choice, as we are
+        // sending all the data in one go anyway?
         var emitter = new Emitter();
         fs.readFile(tiddler_file, 'utf8', function(err, data) {
             if (err) {
@@ -79,37 +133,45 @@ var Store = {
         });
         return emitter;
      },
-                
 }
 
-
-var handlers = {
+/* Handlers are functions that take HTTP Request and Response
+ * objects and write data down the response socket. They "handle"
+ * requests to the routes described below.
+ */
+var Handlers = {
     get_root: function(req, res) {
         res.writeHead(200, {'Content-Type': 'text/html'});
         res.end(front_page);
     },
     get_bags: function(req, res) {
-        fs.readdir('.', function(err, files) {
-            var bags = [];
-            files.forEach(function(file) {
-                if (/.bag$/.test(file)) {
-                    bags.push(file.replace(/.bag$/, ''));
-                }
-            });
+        var emitter = Store.get_bags();
+        var bags = [];
+        emitter.addListener('data', function(bag) {
+            bags.push(bag);
+        });
+        emitter.addListener('end', function() {
             res.writeHead(200, {'Content-Type': 'application/json'});
             res.end(JSON.stringify(bags));
         });
+        emitter.addListener('error', function(err) {
+            res.writeHead(404, {'Content-Type': 'text/plain'});
+            res.end('Unalbe to get bags ' + err);
+        });
     },
     get_recipes: function(req, res) {
-        fs.readdir('.', function(err, files) {
-            var recipes = [];
-            files.forEach(function(file) {
-                if (/.recipe$/.test(file)) {
-                    recipes.push(file.replace(/.recipe$/, ''));
-                }
-            });
+        var emitter = Store.get_recipes();
+        var recipes = [];
+        emitter.addListener('data', function(recipe) {
+            recipes.push(recipe);
+        });
+        emitter.addListener('end', function() {
             res.writeHead(200, {'Content-Type': 'application/json'});
             res.end(JSON.stringify(recipes));
+        });
+        emitter.addListener('error', function(err) {
+            res.writeHead(404, {'Content-Type': 'text/plain'});
+            res.end('Unalbe to get recipes ' + err);
         });
     },
     get_recipe: function(req, res) {
@@ -382,38 +444,38 @@ var handlers = {
 };
 
 var routes = {
-    '\/': { GET: handlers.get_root },
-    '\/bags\/?': { GET: handlers.get_bags },
-    '\/recipes\/?': { GET: handlers.get_recipes },
+    '\/': { GET: Handlers.get_root },
+    '\/bags\/?': { GET: Handlers.get_bags },
+    '\/recipes\/?': { GET: Handlers.get_recipes },
     '\/recipes\/(\\w+)\/?': {
-        GET: handlers.get_recipe,
-        PUT: handlers.put_recipe,
+        GET: Handlers.get_recipe,
+        PUT: Handlers.put_recipe,
     },
     '\/recipes\/(\\w+)\/tiddlers\/?': {
-        GET: handlers.get_recipe_tiddlers,
+        GET: Handlers.get_recipe_tiddlers,
     },
     '\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/?': {
-        GET: handlers.get_recipe_tiddler,
-        PUT: handlers.put_recipe_tiddler,
+        GET: Handlers.get_recipe_tiddler,
+        PUT: Handlers.put_recipe_tiddler,
     },
 /*'\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
-        GET: handlers.get_recipe_tiddler_revisions,
+        GET: Handlers.get_recipe_tiddler_revisions,
     }, */
     '\/bags\/(\\w+)\/?': {
-        GET: handlers.get_bag,
-        PUT: handlers.put_bag,
+        GET: Handlers.get_bag,
+        PUT: Handlers.put_bag,
     },
     '\/bags\/(\\w+)\/tiddlers\/?': {
-        GET: handlers.get_bag_tiddlers,
+        GET: Handlers.get_bag_tiddlers,
     },
     '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/?': {
-        PUT: handlers.put_bag_tiddler,
-        GET: handlers.get_bag_tiddler,
+        PUT: Handlers.put_bag_tiddler,
+        GET: Handlers.get_bag_tiddler,
     },
 /*    '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
-        GET: handlers.get_bag_tiddler_revisions,
+        GET: Handlers.get_bag_tiddler_revisions,
     },*/
-    '\/search': { GET: handlers.search },
+    '\/search': { GET: Handlers.search },
 };
 
 // configure and start the server
