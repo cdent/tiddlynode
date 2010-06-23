@@ -48,6 +48,18 @@ var Store = {
         });
         return emitter;
     },
+    delete_recipe: function(recipe_name) {
+        var recipe_file = recipe_name + '.recipe';
+        var emitter = new Emitter();
+        fs.unlink(recipe_file, function(err) {
+            if (err) {
+                emitter.emit('error', err);
+            } else {
+                emitter.emit('end');
+            }
+        });
+        return emitter;
+    },
     get_recipe: function(recipe_name, success, error) {
         var recipe_file = recipe_name + '.recipe';
         fs.readFile(recipe_file, 'utf8', function(err, data) {
@@ -79,6 +91,61 @@ var Store = {
                 }
             }
         });
+        return emitter;
+    },
+    delete_bag: function(bag_name) {
+        var bag_dir = bag_name + '.bag';
+        var tiddlers_dir = bag_dir + '/tiddlers';
+        var emitter = new Emitter();
+        var delete_tiddlers = function(dir, tiddler_success) {
+            sys.puts('gonna read ' + dir);
+            fs.readdir(dir, function(err, files) {
+                if (err) {
+                    emitter.emit('error', err);
+                } else {
+                    // XXX redundant?
+                    if (files.length > 0) {
+                        while (files.length > 0) {
+                            file = files.shift();
+                            sys.puts('gonna delete ' + file);
+                            var tiddler_emitter = Store.delete_tiddler(file, bag_name);
+                            tiddler_emitter.addListener('end', function() {
+                                if (files.length == 0) {
+                                    tiddler_success(bag_dir, tiddlers_dir);
+                                }
+                            });
+                            tiddler_emitter.addListener('error', function(err) {
+                                emitter.emit('error', err);
+                            });
+                        }
+                    } else {
+                        tiddler_success(bag_dir, tiddlers_dir);
+                    }
+                }
+            });
+        };
+        var delete_this_bag = function(bagdir, tiddlerdir) {
+            fs.rmdir(tiddlerdir, function(err) {
+                if (err) {
+                    emitter.emit('error', err);
+                } else {
+                    fs.unlink(bagdir + '/description', function(err) {
+                        if (err) {
+                            emitter.emit('error', err);
+                        } else {
+                            fs.rmdir(bagdir, function(err) {
+                                if (err) {
+                                    emitter.emit('error', err);
+                                } else {
+                                    emitter.emit('end');
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        };
+        delete_tiddlers(tiddlers_dir, delete_this_bag);
         return emitter;
     },
     get_bag_tiddlers: function(bag_name) {
@@ -190,17 +257,29 @@ var Handlers = {
             res.end('Unalbe to get recipes ' + err);
         });
     },
+    delete_recipe: function(req, res) {
+        var recipe_name = RegExp.$1;
+        var emitter = Store.delete_recipe(recipe_name);
+        emitter.addListener('end', function() {
+            res.writeHead('204', {});
+            res.end('');
+        });
+        emitter.addListener('error', function(err) {
+            res.writeHead('404', {'Content-Type': 'text/plain'});
+            res.end(err);
+        });
+    },
     get_recipe: function(req, res) {
         var recipe_name = RegExp.$1;
-        fs.readFile(recipe_name + '.recipe', 'utf8', function(err, data) {
-            if (err) {
-                res.writeHead(404, {'Content-Type': 'text/plain'});
-                res.end('No recipe ' + recipe_name + '\n');
-            } else {
-                res.writeHead(200, {'Content-Type': 'application/json'});
-                res.end(data);
-            }
-        });
+        var success = function(data) {
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(data);
+        }
+        var error = function(err) {
+            res.writeHead(404, {'Content-Type': 'text/plain'});
+            res.end('No recipe ' + recipe_name + ':' + err + '\n');
+        }
+        Store.get_recipe(recipe_name, success, error);
     },
     put_recipe: function(req, res) {
         var body = '';
@@ -222,9 +301,20 @@ var Handlers = {
             } 
         });
     },
+    delete_bag: function(req, res) {
+        var bag_name = RegExp.$1;
+        var emitter = Store.delete_bag(bag_name);
+        emitter.addListener('end', function() {
+            res.writeHead('204', {});
+            res.end('');
+        });
+        emitter.addListener('error', function(err) {
+            res.writeHead('404', {'Content-Type': 'text/plain'});
+            res.end('Unable to delete bag ' + bag_name + ':' + err + '\n');
+        });
+    },
     get_bag: function(req, res) {
         var bag_name = RegExp.$1;
-        var bag_dir = bag_name + '.bag';
         var error = function(err) {
             res.writeHead(404, {'Content-Type': 'text/plain'});
             res.end('No bag ' + bag_name + ': ' + err + '\n');
@@ -488,6 +578,7 @@ var routes = {
     '\/recipes\/(\\w+)\/?': {
         GET: Handlers.get_recipe,
         PUT: Handlers.put_recipe,
+        DELETE: Handlers.delete_recipe,
     },
     '\/recipes\/(\\w+)\/tiddlers\/?': {
         GET: Handlers.get_recipe_tiddlers,
@@ -502,6 +593,7 @@ var routes = {
     '\/bags\/(\\w+)\/?': {
         GET: Handlers.get_bag,
         PUT: Handlers.put_bag,
+        DELETE: Handlers.delete_bag,
     },
     '\/bags\/(\\w+)\/tiddlers\/?': {
         GET: Handlers.get_bag_tiddlers,
