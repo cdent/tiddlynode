@@ -157,6 +157,14 @@ var Store = {
             if (err) {
                 emitter.emit('error', err);
             } else {
+                var counter = files.length;
+                function check() {
+                    counter--;
+                    if (counter === 0) {
+                        sys.puts('last tiddler read');
+                        emitter.emit('end');
+                    }
+                }
                 sys.puts('files ' + files);
                 if (files.length > 0) {
                     while (files.length > 0) {
@@ -165,15 +173,12 @@ var Store = {
                         var new_tiddler = null;
                         // XXX: the data/end combo here is fiddly
                         tiddler_emitter.addListener('data', function(tiddler) {
-                            sys.puts('getting data ' + tiddler.title);
+                            delete tiddler.text; // XXX unless FAT
                             new_tiddler = tiddler;
                         });
                         tiddler_emitter.addListener('end', function() {
-                            sys.puts('ending data ' + new_tiddler.title);
                             emitter.emit('data', new_tiddler);
-                            if (files.length == 0) {
-                                emitter.emit('end');
-                            }
+                            check();
                         });
                         tiddler_emitter.addListener('error', function(err) {
                             emitter.emit('error', err);
@@ -338,13 +343,12 @@ var Handlers = {
             }
         });
         emitter.addListener('end', function() {
-            sys.puts('end got bag tiddlers' + tiddlers);
-            tiddlers.forEach(function(index) {
-                sys.puts('tiddlers are' + index.title);
+            tiddlers.forEach(function(tiddler) {
+                sys.puts('tiddlers are' + tiddler.title);
             });
             res.writeHead(200, {'Content-Type': 'application/json'});
             var foo = JSON.stringify(tiddlers);
-            sys.puts(foo);
+            //sys.puts(foo);
             res.end(foo);
         });
         emitter.addListener('error', function(err) {
