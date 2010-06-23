@@ -121,10 +121,20 @@ var Store = {
         });
         return emitter;
     },
+    delete_tiddler: function(tiddler_title, bag_name) {
+        var tiddler_file = bag_name + '.bag' + '/tiddlers/' + tiddler_title;
+        var emitter = new Emitter();
+        fs.unlink(tiddler_file, function(err) {
+            if (err) {
+                emitter.emit('error', err);
+            } else {
+                emitter.emit('end');
+            }
+        });
+        return emitter;
+    },
     get_tiddler: function(tiddler_title, bag_name) {
         var tiddler_file = bag_name + '.bag' + '/tiddlers/' + tiddler_title;
-        // XXX: Is an emitter here really the best choice, as we are
-        // sending all the data in one go anyway?
         var emitter = new Emitter();
         fs.readFile(tiddler_file, 'utf8', function(err, data) {
             sys.puts('tiddler file ' + tiddler_file);
@@ -281,6 +291,19 @@ var Handlers = {
                 res.writeHead(400, {'Content-Type': 'text/plain'});
                 res.end('No body content\n');
             } 
+        });
+    },
+    delete_bag_tiddler: function(req, res) {
+        var bag_name = RegExp.$1;
+        var tiddler_name = RegExp.$2;
+        var emitter = Store.delete_tiddler(tiddler_name, bag_name);
+        emitter.addListener('end', function() {
+            res.writeHead('204', {});
+            res.end('');
+        });
+        emitter.addListener('error', function(err) {
+            res.writeHead('404', {'Content-Type': 'text/plain'});
+            res.end(err);
         });
     },
     get_bag_tiddler: function(req, res) {
@@ -486,6 +509,7 @@ var routes = {
     '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/?': {
         PUT: Handlers.put_bag_tiddler,
         GET: Handlers.get_bag_tiddler,
+        DELETE: Handlers.delete_bag_tiddler,
     },
 /*    '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
         GET: Handlers.get_bag_tiddler_revisions,
