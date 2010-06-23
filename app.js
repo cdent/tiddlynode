@@ -330,8 +330,8 @@ var Handlers = {
         var emitter = Store.get_bag_tiddlers(bag_name);
         var tiddlers = [];
         emitter.addListener('data', function(tiddler) {
-            sys.puts('got a tiddler ' + tiddler.title);
-            if (tiddler.title) {
+            if (tiddler && tiddler.title) {
+                sys.puts('got a tiddler ' + tiddler.title);
                 tiddlers.push(tiddler);
             }
         });
@@ -575,30 +575,30 @@ var routes = {
     '\/': { GET: Handlers.get_root },
     '\/bags\/?': { GET: Handlers.get_bags },
     '\/recipes\/?': { GET: Handlers.get_recipes },
-    '\/recipes\/(\\w+)\/?': {
+    '\/recipes\/([\\w\.-]+)\/?': {
         GET: Handlers.get_recipe,
         PUT: Handlers.put_recipe,
         DELETE: Handlers.delete_recipe,
     },
-    '\/recipes\/(\\w+)\/tiddlers\/?': {
+    '\/recipes\/([\\w\.-]+)\/tiddlers\/?': {
         GET: Handlers.get_recipe_tiddlers,
     },
-    '\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/?': {
+    '\/recipes\/([\\w\.-]+)\/tiddlers\/(\\w+)\/?': {
         GET: Handlers.get_recipe_tiddler,
         PUT: Handlers.put_recipe_tiddler,
     },
 /*'\/recipes\/(\\w+)\/tiddlers\/(\\w+)\/revisions\/?': {
         GET: Handlers.get_recipe_tiddler_revisions,
     }, */
-    '\/bags\/(\\w+)\/?': {
+    '\/bags\/([\\w\.-]+)\/?': {
         GET: Handlers.get_bag,
         PUT: Handlers.put_bag,
         DELETE: Handlers.delete_bag,
     },
-    '\/bags\/(\\w+)\/tiddlers\/?': {
+    '\/bags\/([\\w\.-]+)\/tiddlers\/?': {
         GET: Handlers.get_bag_tiddlers,
     },
-    '\/bags\/(\\w+)\/tiddlers\/(\\w+)\/?': {
+    '\/bags\/([\\w\.-]+)\/tiddlers\/([\\w\.-]+)\/?': {
         PUT: Handlers.put_bag_tiddler,
         GET: Handlers.get_bag_tiddler,
         DELETE: Handlers.delete_bag_tiddler,
