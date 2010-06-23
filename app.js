@@ -158,7 +158,7 @@ var Store = {
                 emitter.emit('error', err);
             } else {
                 var counter = files.length;
-                function check() {
+                var check = function() {
                     counter--;
                     if (counter === 0) {
                         sys.puts('last tiddler read');
@@ -465,32 +465,35 @@ var Handlers = {
                 bags.push(bag); // in reverse order
             });
             var check_for_tiddler = function(bags) {
-                var bag = bags.pop();
                 var bagerror = function(err) {
                     res.writeHead('404', {'Content-Type': 'text/plain'});
                     res.end('No bag ' + bag + ': ' + err + '\n');
                 }
-                if (bag) {
-                    var tiddlers = {};
-                    var emitter = Store.get_bag_tiddlers(bag);
-                    emitter.addListener('data', function(tiddler) {
-                        sys.puts('adding tiddler ' + tiddler.title);
-                        tiddlers[tiddler.title] = tiddler;
-                    });
-                    emitter.addListener('end', function() {
-                        sys.puts(bags.length);
-                        if (bags.length) {
-                            check_for_tiddler(bags);
-                        } else {
-                            res.writeHead('200',
-                                {'Content-Type': 'application/json'});
-                            var outputs = [];
-                            for (tiddler in tiddlers) {
-                                sys.puts(tiddler);
-                                outputs.push(tiddlers[tiddler]);
-                            }
-                            res.end(JSON.stringify(outputs));
+                var counter = bags.length;
+                var check = function(tiddlers) {
+                    counter--;
+                    if (counter === 0) {
+                        res.writeHead('200',
+                            {'Content-Type': 'application/json'});
+                        var outputs = [];
+                        for (tiddler in tiddlers) {
+                            sys.puts(tiddler);
+                            outputs.push(tiddlers[tiddler]);
                         }
+                        res.end(JSON.stringify(outputs));
+                    }
+                }
+                if (bags) {
+                    var tiddlers = {};
+                    bags.forEach(function(bag) {
+                        var emitter = Store.get_bag_tiddlers(bag);
+                        emitter.addListener('data', function(tiddler) {
+                            sys.puts('adding tiddler ' + tiddler.title + 'from bag ' + bag);
+                            tiddlers[tiddler.title] = tiddler;
+                        });
+                        emitter.addListener('end', function() {
+                            check(tiddlers);
+                        });
                     });
                 } else {
                     res.writeHead('404', {'Content-Type': 'text/plain'});
