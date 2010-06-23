@@ -108,7 +108,8 @@ var Store = {
                         while (files.length > 0) {
                             file = files.shift();
                             sys.puts('gonna delete ' + file);
-                            var tiddler_emitter = Store.delete_tiddler(file, bag_name);
+                            var tiddler_emitter = Store.delete_tiddler(
+                                file, bag_name);
                             tiddler_emitter.addListener('end', function() {
                                 if (files.length == 0) {
                                     tiddler_success(bag_dir, tiddlers_dir);
@@ -292,7 +293,8 @@ var Handlers = {
             if (body) {
                 fs.writeFile(recipe_name + '.recipe', body, function(err) {
                     if (err) throw err;
-                    res.writeHead(204, {'Location': '/recipes/' + recipe_name} );
+                    res.writeHead(204,
+                        {'Location': '/recipes/' + recipe_name});
                     res.end('');
                 });
             } else {
@@ -365,7 +367,8 @@ var Handlers = {
                     sys.puts(err);
                     var description = body.description ? body.description : '';
                     description = description.replace(/\s*$/, "\n")
-                    fs.writeFile(bag_dir + '/description', description, function(err) {
+                    fs.writeFile(bag_dir + '/description',
+                        description, function(err) {
                     if (err) throw err;
                     fs.mkdir(bag_dir + '/tiddlers', 0755, function(err) {
                         sys.puts(err);
@@ -431,8 +434,9 @@ var Handlers = {
                         res.writeHead(400, {'Content-Type': 'text/plain'});
                         res.end('unable to write tiddler: ' + err);
                     } else {
-                        res.writeHead(204, {'Location':
-                            '/bags/' + bag_name + '/tiddlers/' + tiddler_name});
+                        res.writeHead(204,
+                            {'Location': '/bags/' + bag_name +
+                            '/tiddlers/' + tiddler_name});
                         res.end('');
                     }
                 });
@@ -474,8 +478,14 @@ var Handlers = {
                         if (bags.length) {
                             check_for_tiddler(bags);
                         } else {
-                            res.writeHead('200', {'Content-Type': 'application/json'});
-                            res.end(JSON.stringify(tiddlers));
+                            res.writeHead('200',
+                                {'Content-Type': 'application/json'});
+                            var outputs = [];
+                            for (tiddler in tiddlers) {
+                                sys.puts(tiddler);
+                                outputs.push(tiddlers[tiddler]);
+                            }
+                            res.end(JSON.stringify(outputs));
                         }
                     });
                 } else {
