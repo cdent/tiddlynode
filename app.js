@@ -35,7 +35,7 @@ var Store = {
                     while (files.length > 0) {
                         file = files.shift();
                         if (/.bag$/.test(file)) {
-                            emitter.emit('data', file);
+                            emitter.emit('data', file.replace(/.bag$/, ''));
                         }
                         if (files.length == 0) {
                             emitter.emit('end');
@@ -68,7 +68,7 @@ var Store = {
                     while (files.length > 0) {
                         file = files.shift();
                         if (/.recipe$/.test(file)) {
-                            emitter.emit('data', file);
+                            emitter.emit('data', file.replace(/.recipe$/, ''));
                         }
                         if (files.length == 0) {
                             emitter.emit('end');
@@ -85,10 +85,12 @@ var Store = {
         var tiddlers_dir = bag_name + '.bag' + '/tiddlers';
         var emitter = new Emitter();
         fs.readdir(tiddlers_dir, function(err, files) {
+            sys.puts('tiddlers_dir ' + tiddlers_dir);
             if (err) {
                 emitter.emit('error', err);
             } else {
-                if (files) {
+                sys.puts('files ' + files);
+                if (files.length > 0) {
                     while (files.length > 0) {
                         file = files.shift();
                         var tiddler_emitter = Store.get_tiddler(file, bag_name);
@@ -110,6 +112,9 @@ var Store = {
                         });
                     }
                 } else {
+                    sys.puts('emitting no tiddler');
+                    emitter.emit('data', null);
+                    sys.puts('ending no tiddler');
                     emitter.emit('end');
                 }
             }
@@ -122,6 +127,7 @@ var Store = {
         // sending all the data in one go anyway?
         var emitter = new Emitter();
         fs.readFile(tiddler_file, 'utf8', function(err, data) {
+            sys.puts('tiddler file ' + tiddler_file);
             if (err) {
                 emitter.emit('error', err);
             } else {
@@ -224,12 +230,20 @@ var Handlers = {
         var emitter = Store.get_bag_tiddlers(bag_name);
         var tiddlers = [];
         emitter.addListener('data', function(tiddler) {
-            tiddlers.push({title: tiddler.title});
+            sys.puts('got a tiddler ' + tiddler.title);
+            if (tiddler.title) {
+                tiddlers.push(tiddler);
+            }
         });
         emitter.addListener('end', function() {
+            sys.puts('end got bag tiddlers' + tiddlers);
+            tiddlers.forEach(function(index) {
+                sys.puts('tiddlers are' + index.title);
+            });
             res.writeHead(200, {'Content-Type': 'application/json'});
-            sys.puts('tiddlers are' + tiddlers);
-            res.end(JSON.stringify(tiddlers));
+            var foo = JSON.stringify(tiddlers);
+            sys.puts(foo);
+            res.end(foo);
         });
         emitter.addListener('error', function(err) {
             res.writeHead('404', {'Content-Type': 'text/plain'});
@@ -297,6 +311,7 @@ var Handlers = {
             var tiddler_name = RegExp.$2;
             var bag_dir = bag_name + '.bag';
             var tiddler_file = bag_dir + '/tiddlers/' + tiddler_name;
+            sys.puts('gonna put to ' + tiddler_file);
             if (body) {
                 fs.writeFile(tiddler_file, body, function(err) {
                     if (err) {
@@ -489,6 +504,7 @@ http.createServer(function (req, res) {
     for (pattern in routes) {
         if (path.match('^' + pattern + '$')) {
             route = routes[pattern];
+            sys.puts(pattern);
             break;
         }
     }
